@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CS180 Project 1 Austin Zhu</title>
+    <style>  
+        body {
+        padding: 100px;
+        width: 1000px;
+        margin: auto;
+        text-align: left;
+        font-weight: 300;
+        font-family: 'Open Sans', sans-serif;
+        color: #121212;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4 {
+        font-family: 'Source Sans Pro', sans-serif;
+        }
+    </style>
+    <title>CS 180, Project 1</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+<body>
+    <h1 align="center">Project 1: Images of the Russian Empire</h1>
+    <h2 align="center">Austin Zhu</h2>
+
+    <div>
+        In this project, we are tasked with taking the digitized Prokudin-Gorskii glass plate images
+        and correcting their alignment, so that when the three color channels are combined, the original images
+        can be recreated. The methods used to do this are detailed below:
+
+        <h3 align="left">JPGs: Exhaustive Alignment</h3>
+        For the smaller <code>.jpg</code> files, we simply used a strategy of checking every possible
+        displacement within a [-15, 15] by [-15, 15] window. We can easily use <code>np.roll</code> in order
+        to displace one of the images, then use a metric to compare the similarity between the displaced image
+        and the original of the other image. Finally, we choose which displacement within the window minimizes
+        the metric we used.
+        <br>
+        <br>
+        For this project, I specifically used the L2 norm distance between the images as it was fairly simple
+        to implement and still gave fairly good results for most of the images. Additionally, 5% of the sides 
+        and top and bottom were cropped when computing the L2 norm in order to reduce the image of the black
+        boundaries and weird wraparound conditions.
+        <br>
+        <br>
+        Below are the results for the jpg images:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/cathedral.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Cathedral. Runtime: 4.0s
+                                <br>
+                                R: (12, 3), G: (5, 2)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/monastery.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Monastery. Runtime: 4.0s
+                                <br>
+                                R: (3, 2), G: (-3, 2)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/tobolsk.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Tobolsk. Runtime: 4.5s
+                                <br>
+                                R: (6, 3), G: (3, 2)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">TIFs: Image Pyramid Search</h3>
+        When we start dealing with must more detailed <code>.tif</code> images, the exhaustive approach is no 
+        longer sufficient or computationally feasible. So, I used an image pyramid search which involved going
+        from the coarsest possible image and increasing quality to get back to the original image, while 
+        adjusting our estimate for the optimal displacement. Images were made coarser using the 
+        <code>sk.transform.rescale</code> function.
+        <br>
+        <br>
+        Additionally, we made some changes to the original align function, now allowing you to change the
+        window size that is exhaustively searched over and to change the center of the window. For example,
+        if the window size is 2 and the center is (3,5), the align function now searches over the window
+        [1, 5] by [3, 7]. This allows us to update our optimal displacement by feeding the result of 
+        the previous recursive call (multiplied by 2 to account for upscaling) into the center argument.
+        Also, due to the nature of the call, we can shrink the search window to [-2, 2] by [-2, 2] to help
+        improve performance.
+        <br>
+        <br>
+        After these adjustments, we get the following results from the tif images:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/church.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Church. Runtime: 42.4s
+                                <br>
+                                R: (58, -5), G: (25, 3)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/emir.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Emir. Runtime: 60.4s
+                                <br>
+                                R: (88, 43), G: (49, 24)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/harvesters.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Harvesters. Runtime: 38.5s
+                                <br>
+                                R: (124, 13), G: (60, 16)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/icon.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Icon. Runtime: 36.0s
+                                <br>
+                                R: (89, 23), G: (41, 17)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/lady.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Lady. Runtime: 31.9s
+                                <br>
+                                R: (111, 12), G: (55, 8)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/melons.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Melons. Runtime: 54.3s
+                                <br>
+                                R: (177, 11), G: (82, 9)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/onion_church.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Onion Church. Runtime: 41.5s
+                                <br>
+                                R: (108, 36), G: (51, 26)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/sculpture.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Sculpture. Runtime: 40.4s
+                                <br>
+                                R: (140, -27), G: (33, -11)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/self_portrait.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Self Portrait. Runtime: 40.5s
+                                <br>
+                                R: (175, 34), G: (79, 29)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/three_generations.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Three Generations. Runtime: 58.8s
+                                <br>
+                                R: (112, 10), G: (55, 13)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/train.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Train. Runtime: 51.6s
+                                <br>
+                                R: (87, 32), G: (42, 6)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <br>
+        <i>Note: HTML style template inspired by Lillian Weng's website from Fall 2023.</i>
+    </div>
+</body>
+</html>
