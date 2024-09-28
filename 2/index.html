@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CS180 Project 2 Austin Zhu</title>
+    <style>  
+        body {
+        padding: 100px;
+        width: 1000px;
+        margin: auto;
+        text-align: left;
+        font-weight: 300;
+        font-family: 'Open Sans', sans-serif;
+        color: #121212;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4 {
+        font-family: 'Source Sans Pro', sans-serif;
+        }
+    </style>
+    <title>CS 180, Project 2</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+    <script type="text/javascript" id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+    </script>
+</head>
+<body>
+    <h1 align="center">Project 2: Fun with Filters and Frequencies!</h1>
+    <h2 align="center">Austin Zhu</h2>
+
+    <div>
+        In this project, using what we've learned from class, we can use filters and convolutions to achieve
+        a wide array of different image processing procedures. Specifically, we can implement it into
+        edge detection, sharpening images, hybridizing images, and blending.
+
+        <h2 align="middle">Part 1: Fun with Filters</h2>
+        <h3 align="left">1.1: Finite Difference Operator</h3>
+        In order to identify where the edges of images are, we should find the magnitude of the gradient
+        of the image (More dramatic pixel value change usually corresponds to edges). To calculate the
+        gradient, we can approximate the partial derivatives with respect to x and y by convolving the
+        image with the following finite difference operators:
+        $$D_x = \begin{bmatrix} 1 & -1 \end{bmatrix}, D_y = \begin{bmatrix} 1 \\ -1 \end{bmatrix}$$
+        Then once we have convolved the image, we can calculate the magnitude of the gradient by using
+        the formula: \(\sqrt{dx^2 + dy^2}\). Finally, we can visualize the edges by choosing a threshold
+        to set everything greater to 1 and everything less than to 0. Qualitatively, I chose the threshold
+        to be \(0.26\). The original image and the image with edges are below:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/cameraman.png" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                The original cameraman image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/camera_edges.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Edges of the image after 
+                                <br>calculating the gradient magnitude.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">1.2: Derivative of Gaussian (DoG) Filter</h3>
+        We can further improve these edge calculations by reducing the noise of the image via
+        smoothing. This can be achieved by first convolving the image with a Gaussian kernel before
+        applying the partial derivative operations. For the following images, a Gaussian kernel with
+        size \(= 15\) and \(\sigma = 1.75\) was used, and then the outer product of the kernel was
+        taken with itself to produce a 2D Gaussian kernel. The threshold used was \(0.08\).
+
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/camera_edges.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Edge detection on the <br>original image without smoothing.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/camera_edges_blurred.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Edge detection <br>after Gaussian smoothing.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        We can notice some differences between the two images:
+        <ol>
+            <li>The edges of the smoothed image are thicker than the unsmoothe, which makes sense
+                due to the blurring of the image.
+            </li>
+            <li>The edge artifacts of the left edge image have been removed after smoothing.</li>
+            <li>The edge detection overall seems to catch almost all of the edges now, while
+                without smoothing, there is varied success in identification.
+            </li>
+        </ol>
+
+        As convolution is an associative operator, we can achieve the same effect by first convoluting
+        the Gaussian kernel with the difference operator to get the Gaussian derivative kernel. The kernels
+        are shown below for x and y:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/DoGx.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Derivative of Gaussian kernel <br>with respect to x.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/DoGy.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Derivative of Gaussian kernel <br>with respect to y.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        Then, we can convolve this with the original image to see the same effect as the first order
+        of operations. As we can see below, the outputs are identical as expected:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/camera_edges_blurred.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Result by first smoothing the image, <br>then applying the derivative operator.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/camera_edges_convolved.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Result by first applying the derivative <br>operator to the Gaussian kernel, <br>then
+                                convolving the result with the original image.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2 align="middle">Part 2: Fun with Frequencies!</h2>
+        <h3 align="left">2.1: Image "Sharpening"</h3>
+        For this part, our goal is to "sharpen" images by obtaining the "edges" of an image, by subtracted
+        its smoothed counterpart from the original image. We can then add these edges times some scalar
+        to the original image to further emphasize these edges. This is achieved by convoluting each of
+        our images with the operator, \((1+\alpha)*e - \alpha*g\), where is the impulse operator and g is 
+        a Gaussian kernel.
+        <br>
+        <br>
+        Applying this strategy to the Taj Mahal image (with \(\alpha=0.3\), a kernel size of 25, and a sigma of 1), we get:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/taj.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Original Image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/taj_sharpened.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Sharpened Image.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        I also applied this to the following image of a fluffy bird (with \(\alpha=0.5\), a kernel size of 50, and a sigma of 20).
+        In addition to the sharpened image, I also show the difference between the two images so we can see
+        what regions were highlighted.
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/fluff_birb.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Original Image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/birb_sharp.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Sharpened Image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/birb_diff.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Difference between the original image
+                                <br>and the sharpened image.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <br>
+        Finally, we can also see the result of blurring this clear seagull image (convoluted with a
+        Gaussian kernel of size 5 and sigma 2). Then, we can see the results of sharpening the image by
+        applying our algorithm (with \(\alpha=1\), a kernel size of 80, and a sigma of 20).
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/seagull.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Original Image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/blurred_seagull.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Blurred Image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/seagull_sharpened.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Resharpened Image.
+                                <br>and the sharpened image.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        As we can see, the results of the sharpening doesn't fully recover the original image, but it does 
+        accentuate the contrast of the image, as well as somewhat making it clearer.
+
+        <h3 align="left">2.2: Hybrid Images</h3>
+        In order to take two images and make a hybrid image, we will pass one image through a low pass filter
+        and the other through a high pass filter, combining them by taking the average between the two. The low
+        pass filter is achieved simply by convolution with a Gaussian kernel, while the high pass filter is achieved
+        by repeated the low pass filter steps, and subtracting the result from the original image. Some additional work
+        is needed to align the images, which is done using the given starter code. 
+        <br>
+        This hybrid image was done by combining a bowl of fruit sculpture, specifically the orange, (from the MOMA in Golden Gate Park) 
+        and an orange flower that I crocheted. 
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/fruit.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Fruit bowl image for low frequency.
+                                <br> Size: 20, Sigma: 40
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/flower.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Flower image for high frequency.
+                                <br> Size: 50, Sigma: 80
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/hybrid_fruit_flower.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Hybridized images.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <br>
+        Next, I created a hybrid image between one of my pet budgies (Danny!) and a clay figure of a budgie that one
+        of my friends made for me. 
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/birbs.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (Real) budgie image for low frequency.
+                                <br> Size: 20, Sigma: 10
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/mini_birb.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (Fake) budgie image for high frequency.
+                                <br> Size: 40, Sigma: 20
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/hybrid_birb.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Hybridized images.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 align="left">Fourier Transforms of Birbs</h4>
+        The following are the log Fourier transform results of the original images, filtered images, and 
+        final hybridized images for the birb photos.
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/birbs_fft.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (Real) budgie image FFT.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/mini_birb_fft.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (Fake) budgie image FFT.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/birbs_fft_filter.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Filtered (Real) budgie image FFT.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/mini_birb_fft_filter.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (Fake) budgie image FFT.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/hybrid_birb_fft.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Hybridized image FFT.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 align="left">Hybrid Fireworks Failure</h4>
+        The following is my failed attempt at a hybrid photo of two different fireworks images taken
+        at the same place. In the result photo, you can kind of see the high frequency and low frequency images,
+        but overall, I think there was too much overall and color similarity for it to be particularly
+        effective.
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/firework1.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Firework image for low frequency.
+                                <br> Size: 20, Sigma: 10
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/firework2.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Firework image for high frequency.
+                                <br> Size: 40, Sigma: 20
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/hybrid_firework_fail.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Hybridized images.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+
+        <h3 align="left">2.3: Gaussian and Laplacian Stacks</h3>
+        Finally, to achieve multi-resolution blending, we first need to implement Gaussian and Laplacian
+        stacks. To implement a Gaussian stack, we just need to convolute each layer with the same Gaussian
+        kernel to get the higher layer. Importantly, with each convolution, we set the convolution to keep
+        the image size the same and to pad symmetrical so that our stack doesn't decrease in size.
+        <br>
+        <br>
+        Once we obtain a Gaussian stack, it is fairly easy to get the Laplacian stack by just taking the difference
+        between consecutive layers of the Gaussian stack of an image. After having implemented these methods, I replicate
+        Figure 3.42 in Szelski. I generated the following using six layers, a kernel size of 20, and a sigma of 20.
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/apple0.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (a)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/orange0.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (b)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/combined0.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (c)
+                            </figcaption>
+                        </td>
+                    </tr>
+                    <tr align="center">
+                        <td>
+                            <img src="media/apple2.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (d)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/orange2.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (e)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/combined2.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (f)
+                            </figcaption>
+                        </td>
+                    </tr>
+                    <tr align="center">
+                        <td>
+                            <img src="media/apple4.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (g)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/orange4.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (h)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/combined4.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (i)
+                            </figcaption>
+                        </td>
+                    </tr>
+                    <tr align="center">
+                        <td>
+                            <img src="media/apple.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (j)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/orange.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (k)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/combined.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (l)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        The first, second, and third rows are the zeroth, second, and fourth layers of hte stacks respectively, with the
+        final row being the results of the collapsed stacks. The first and second columns are for the apple 
+        and the orange separately (with the mask applied). The last column is the combined stack result. Thus, Figure (k)
+        is the final hybrid image that we see in the paper.
+
+        <h3 align="left">2.4: Multiresolution Blending</h3>
+        Now that the stacks are implemented, we can obtain our multiresolution blended images just by collapsing
+        the stacks (summing up every layer). The following are the inputs and outputs for the blended images that
+        I made:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/blue_sky.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Bay skyline input image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/jellyfish.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Jellyfish input image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/jellyfish_sky_mask.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Mask.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/jellyfish_sky.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Blended image.
+                                <br>Layers: 6, Size: 20, Sigma: 20
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <br>
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/campanile.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Campanile input image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/pencil.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Pencil input image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/campanile_pencil_mask.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Mask.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        <table style="width:100%">
+            <tbody>
+                <tr align="center">
+                    <td>
+                        <img src="media/campanile_pencil.jpg" align="middle" width="300vw">
+                        <figcaption align="middle">
+                            Blended image.
+                            <br>Layers: 6, Size: 20, Sigma: 20
+                        </figcaption>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+</body>
+</html>
