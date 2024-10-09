@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CS180 Project 3 Austin Zhu</title>
+    <style>  
+        body {
+        padding: 100px;
+        width: 1000px;
+        margin: auto;
+        text-align: left;
+        font-weight: 300;
+        font-family: 'Open Sans', sans-serif;
+        color: #121212;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4 {
+        font-family: 'Source Sans Pro', sans-serif;
+        }
+    </style>
+    <title>CS 180, Project 3</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+    <script type="text/javascript" id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+    </script>
+</head>
+<body>
+    <h1 align="center">Project 3: Face Morphing</h1>
+    <h2 align="center">Austin Zhu</h2>
+
+    <div>
+        This project largely dealing with algorithms regarding facial morphing, computation of population
+        face means, and the caricatures we can create using them.
+
+        <h3 align="middle">Part 1: Defining Correspondences</h3>
+        For the next three parts, I will focus on morphing my face and my friend Joe's face (also taking 180!).
+        The original images to morph as shown below.
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/austin.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                My picture.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/joe_1.jpeg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Joe's picture.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        In order to start the morphing process, we need to define the point correspondences between our two
+        faces, which I did using the provided labeling tool. These correspondences will allow us to clearly
+        define what sets of points should morph into each other to have a smooth transition. Then, I define
+        a consistent triangulation for both sets of points by averaging the points together, and finding a
+        triangulation using <code>scipy.spatial.Delaunay</code> in order to get the Delaunay triangulation.
+        The results for both images are shown below:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/austin_tri.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Triangulation on my image.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/joe_tri.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Triangulation on Joe's image.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">Part 2: Computing the "Mid-Way" Face</h3>
+        Next, given these triangulations, we need to define a method to find the affine transformation from one
+        triangle to another triangle. This affine transformation will be a \(3\times 3\) matrix mapping
+        homgenous coordinates (of the form (x,y,1)). Call the matrix \(A\), then we can define it by setting
+        up a system of equations, or more easily, by solving a matrix equation. So, the transformation is:
+        $$A = YX^{-1}$$
+        where \(X\) and \(Y\) are \(3 \times 3\) matrices with columns of the form (x,y,1) with the x and y coordinates
+        of the vertex of each triangle of interest. \(X\) corresponds to the original triangle and \(Y\)
+        corresponds to the triangle that the transformation is mapping \(X\) onto.
+        <br><br>
+        Then, using this, we can calculate the transformation going from the mean triangulation of mine and
+        Joe's images back to the original images. We then use these transformations to find the original pixels
+        that correspond to each pixel within the triangle of the averaged triangulation, and then set the pixel
+        value of the average image to the average of the mapped pixel values of the two original images. Implementing
+        this, we get the following result:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/joe_austin_half.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Mid-Way face between the two faces.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">Part 3: The Morph Sequence</h3>
+        In order to get the morph sequence between two images, we can repeat the previous steps from part
+        2, but now introduce two new parameters to slightly alter it: <code>warp_frac</code> and <code>dissolve_frac</code>.
+        These two variables are between 0 and 1, and simply change the averaging that we've been doing into 
+        weighted averages. <code>warp_frac</code> alters the averaging of the reference points, so image 1
+        is weighted by <code>warp_frac</code>, while image 2 is weighted by <code>1-warp_frac</code>. 
+        <code>dissolve_frac</code> behaves very similarly, instead altering the averaging between the original
+        pixel values. 
+        <br><br>
+        By varying these parameters (running the algorithm with both set to values in the array [0, 1/50, 2/50,
+        ..., 49/50, 1],), we can create a smooth transition between the two images. My result is shown below:
+        <div align="middle">
+            <img src="media/austin_to_joe.gif" align="middle" width="300vw">
+            <figcaption align="middle">
+                Morph sequence between the two images.
+            </figcaption>
+        </div>
+
+        <h3 align=left>Part 4: The "Mean-Face" of a Population</h3>
+        For my project, I used the Danish dataset from the IMM Face Database. In order to obtain the mean
+        population face, I did the following steps:
+        <ol>
+            <li>Read in all of the face correspondences from the .asf files and add correspondences in the corners and halfway along the edges.</li>
+            <li>Calculate the mean of face correspondences.</li>
+            <li>Morph each image into the mean face shape defined by the mean face correspondences, done by setting the warp_frac to 1 and the dissolve_frac to 0.</li>
+            <li>Calculate the mean of the morphed images.</li>
+        </ol>
+
+        Here are a few examples of the Danish faces in the database morphed into the mean face shape (3 male and 3 female):
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/morph1.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (a)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/morph2.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (b)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/morph3.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (c)
+                            </figcaption>
+                        </td>
+                    </tr>
+                    <tr align="center">
+                        <td>
+                            <img src="media/morph4.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (d)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/morph5.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (e)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/morph6.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (f)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        My results of the mean faces are outlined below:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/mean.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Mean face of the whole population (40 images).
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/male_mean.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Mean face of the male population (33 images).
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/female_mean.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Mean face of the female population (7 images).
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        Then, we can see the results of morphing my face into the average face, and the average face into
+        my face.
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/austin_to_mean.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                My face morphed into the mean face.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/mean_to_austin.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                The mean face morphed into my face.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <h3 align="left">Part 5: Caricatures: Extrapolating from the Mean</h3>
+        Using these mean images, we can take it further by creating "caricatures" of my face by setting
+        the <code>warp_frac</code> value outside of 0 and 1. Results are shown below:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/austin_caricature_1.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                warp_frac = 1.75
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/austin_caricature_2.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                warp_frac = -0.5
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">Bells and Whistles</h3>
+        <h4 align="left">Face-Morphing Video Between Classmates</h4>
+        For this bells and whistles, we created a morphing gif between four of us in the class: myself,
+        Rebecca Feng, Joe Alarcon, and Samyak Tiwari. The original images are shown below:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/austin.jpg" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                Me.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/rebecca.jpeg" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                Rebecca Feng.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/joe_2.jpeg" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                Joe Alarcon.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/samyak.jpeg" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                Samyak Tiwari
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        The resulting gif is shown below:
+        <div align="middle">
+            <img src="media/group_morph.gif" align="middle" width="300vw">
+            <figcaption align="middle">
+                Morph sequence between the four of us.
+            </figcaption>
+        </div>
+
+        <h4 align="left">PCA</h4>
+        I did PCA on the Dane dataset of the morphed images for the male images. The following are the eigenfaces 
+        for the five greatest eigenvalues.
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/eigenface1.jpg" align="middle" width="300vw">
+                        </td>
+                        <td>
+                            <img src="media/eigenface2.jpg" align="middle" width="300vw">
+                        </td>
+                        <td>
+                            <img src="media/eigenface3.jpg" align="middle" width="300vw">
+                        </td>
+                    </tr>
+                    <tr align="center"></tr>
+                        <td>
+                            <img src="media/eigenface4.jpg" align="middle" width="300vw">
+                        </td>
+                        <td>
+                            <img src="media/eigenface5.jpg" align="middle" width="300vw">
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
