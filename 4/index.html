@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CS180 Project 4 Austin Zhu</title>
+    <style>  
+        body {
+        padding: 100px;
+        width: 1000px;
+        margin: auto;
+        text-align: left;
+        font-weight: 300;
+        font-family: 'Open Sans', sans-serif;
+        color: #121212;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4 {
+        font-family: 'Source Sans Pro', sans-serif;
+        }
+    </style>
+    <title>CS 180, Project 4</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+    <script type="text/javascript" id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+    </script>
+</head>
+<body>
+    <h1 align="center">Project 4: [Auto]Stitching Photo Mosaics</h1>
+    <h2 align="center">Austin Zhu</h2>
+
+    <div>
+        This project features the implementation of algorithms to stitch together disparate images into 
+        a larger mosaic of the images, using both user-defined correspondences and automatic methods.
+
+        <h2 align="middle">Part A: Image Warping and Mosaicing</h2>
+        For the first part of this project, we aim to warp and blend images using correspondence points
+        we indicate to merge multiple images into a mosaic.
+
+        <h3 align="left">Recovering Homographies</h3>
+        Using two sets of correspondence points <code>im1_points</code> and <code>im2_points</code>
+        which are two \(n\times 2\) matrices, we can estimate a homography
+         between the correspondence points (a projective transformation). Remember
+        that homographies have 8 degrees of freedom, therefore we need at least 4 pairs of correspondence points 
+        to determine a homography.
+        <br><br>
+        For each pair of points \(x_1, x_2\) and \(x_2, y_2\), we can find two linear equation constraints
+        they correspond to by the following argument:
+        $$H = \begin{bmatrix} a & b & c \\
+        d & e & f \\
+        g & h & 1 \end{bmatrix}$$
+        $$H\begin{bmatrix} x_1 \\ y_1 \\ 1 \end{bmatrix} = \begin{bmatrix} wx_2 \\ wy_2 \\ w \end{bmatrix}$$
+        Plugging in our unknown values from the matrix \(H\) and plugging in the value \(w\), we get the following equations:
+        $$ax_1 + by_1 + c - gx_1x_2 - hy_1x_2 = x_2$$
+        $$dx_1 + ey_1 + f - gx_1y_2 - hy_1y_2 = y_2$$
+        which gives the matrix equation:
+        $$Ah = \begin{bmatrix} x_1 & x_2 & 1 & 0 & 0 & 0 & -x_1x_2 & -y_1x_2 \\
+        0 & 0 & 0 & x_1 & x_2 & 1 & -x_1y_2 & -y_1y_2 \end{bmatrix} \begin{bmatrix} a\\b\\c\\d\\e\\f\\g\\h \end{bmatrix} 
+        = \begin{bmatrix} x_2 \\ y_2 \end{bmatrix} = b$$
+        <br>
+        Thus, for every pair of correspondence points, we get two more rows for the matrix \(A\) and column vector \(b\).
+        If we have only 4 pairs of correspondence points, then \(A\) is invertible, thus \(h = A^{-1}b\).
+        <br><br>
+        If we have more than our system is overdetermined and we can use least-squares to find a solution
+        that minimizes the mean squared error of the homography, which gives us:
+        $$h = (A'A)^{-1}A'b$$
+
+        <h3>Warp the Images</h3>
+        Now given a homography, we can warp an image using the homography by using the concept of 
+        an inverse warp similar to what we did in project 3. First, we map the corners of the original 
+        image through the homography to find the bounds of the warped image. Then, we can use <code>polygon</code>
+        to get all of the internal points of the warped images and warp them through the inverse of the 
+        homography to get their coordinates in the original image. Each pixel values in the warped image is 
+        set to its inverse warped pixel in the original image, with aliasing handled by using <code>griddata</code>.
+
+        <h3>Rectifying Images</h3>
+        Now that we have the means to calculate the homographies between images and can warp images 
+        according to those homographies, we can use this to rectify images, aka take rectangular objects 
+        that have been photographed at an angle, and warp the image so that the object is now rectangular.
+        Correspondence points are manually labeled using the provided correspondence tool from project 3.
+        Result for two images are below:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/franklin.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                A poster of Benjamin Franklin.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/rect_franklin.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Rectified poster.
+                            </figcaption>
+                        </td>
+                    </tr>
+                    <tr align="center">
+                        <td>
+                            <img src="media/bed.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                My bed.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/rect_bed.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                A rectified image of my bed,<br>
+                                rectifying one of the squares of the sheet pattern.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>Blend the Images into a Mosaic</h3>
+        Now, by labeling correspondences between two images that we want to create a mosaic of, we 
+        can warp one image into the projective plane of the other image to align them. By doing some
+        padding to the other image regarding the differences in dimension, we have solve the issue of 
+        alignment.
+        <br><br>
+        In order to blend the images together, we use <code>morpohology.distance_transform_edt</code>
+        on each image (with the original images barely brightened by 0.0001 to distinguish them from the 
+        background), call the results <code>dist1</code> and <code>dist2</code>. 
+        This gives a measure of how far each point is from the background. 
+        Then, applying a logical operator of <code>dist1 > dist2</code>, we end up with a mask for 
+        which areas of the combining image should be sampled from image 1 (1 - mask gives image 2).
+        Finally, we blend the two images using this mask by a two-level Laplacian stack, taking the 
+        code that I wrote in from project 2 to get our final blended mosaic.
+        <br><br>
+        To showcase this algorithm, I find correspondence points and blend the following 3 sets of 
+        images into mosaics, with results (as well as intermediate mosaics) shown below:
+        <br><br>
+        <h4>Bay Area Sunset from the Campanile (with Venus also visible in the sky!)</h4>
+        Set of 5 images. Blended in the order 3 -> 4 -> 2 -> 1 -> 5.
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/sunset_1.jpg" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                (1)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/sunset_2.jpg" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                (2)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/sunset_3.jpg" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                (3)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/sunset_4.jpg" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                (4)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/sunset_5.jpg" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                (5)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Intermediate results:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/sunset_34.jpg" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Blended mosaic between (3) and (4).
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/sunset_234.jpg" align="middle" width="500vw">
+                            <figcaption align="middle">
+                                Blended mosaic between (2), (3), and (4).
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/sunset_1234.jpg" align="middle" width="600vw">
+                            <figcaption align="middle">
+                                Blended mosaic between (1), (2), (3), and (4).
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/sunset_12345.jpg" align="middle" width="700vw">
+                            <figcaption align="middle">
+                                Blended mosaic between all images.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Aside from some mild artifacts due to differents in camera exposure between shots, we can 
+        see that the mosaic was done fairly seamlessly with no noticable misalignments and with 
+        the original color most preserved.
+
+        <h4>San Francisco street from stairs leading to Coit Tower</h4>
+        Set of 3 images. Blended in the order 2 -> 1 -> 3.
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/street_1.jpg" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                (1)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/street_2.jpg" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                (2)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/street_3.jpg" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                (3)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Intermediate results:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/street_12.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Blended mosaic between (1) and (2).
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/street_123.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Blended mosaic between all images.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Here we notice a few more visual artifacts in that one part of the pole isn't completely 
+        aligned and a lady's body is unfortunately cut in half. However, these are issue more stemming 
+        from problems when taking the photos rather than the algorithm itself.
+
+        <h4 align="left">VLSB at Sunset (another sunset photo lol)</h4>
+        Set of 2 images. Blended in the order 1 -> 2.
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/vlsb_1.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (1)
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/vlsb_2.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                (2)
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Intermediate results:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/vlsb_12.jpg" align="middle" width="500vw">
+                            <figcaption align="middle">
+                                Blended mosaic between all images.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Again here we notice some artifacts in lighting and alignment due to different camera exposures 
+        and human error in slight shifts of the center of projection. But overall, the algorithm performs 
+        fairly well at mitigating these issues.
+
+        <h2 align="middle">Part B: Feature Matching for Autostitching</h2>
+        In this second part of the project, the goal is now to automatically determine correspondences 
+        and compute homographies that way so we don't have to manually compute them.
+        
+        <h3 align="left">Step 0: Harris Interest Point Detection</h3>
+        To first get a bank of interest points over which to check, we will use Harris corner detection 
+        on a single scale. This is simply done using the provided sample code. 
+        <br><br>
+        Running this on one of the bay sunset photos, we find:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/sunset_3.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Original sunset photo.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/sunset_harris_pts.jpg" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Sunset photo with found harris corners overlaid.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        As we can see, the Harris points are fairly dense and don't already great at specifically 
+        choosing potential correspondence points for us.
+
+        <h3 align="left">Step 1: Adaptive Non-Maximal Suppression</h3>
+        In order to reduce the number of interest points, while ensuring we still get points with 
+        maximal harris values, distributed somewhat uniformly over the image, we use adaptive 
+        non-maximal suppression as written in the paper.
+        <br><br>
+        The main idea behind the algorithm is to find the minimum suppression radius for each potential 
+        interest point, defined by:
+        $$r_i = \min_j |x_i - x_i|, s.t. f(x_i) < c_{robust}f(x_j), x_j \in \mathcal{J}$$
+        This can be done pretty easily in code by using the provided <code>dist2</code> function and 
+        checking if \(f(x_i) > c_{robust}\max f\), and if so, setting the value equal to \(\infty\).
+        We then obtain our points by choosing the \(n\) points with the greatest minimum suppression radii.
+        The idea of this algorithm is to choose points that don't have nearby points with much greater 
+        Harris values then themselves, aka having a low minimum suppression radius.
+        <br><br>
+        Running this on our previous harris points with the suggested \(c_{robust} = 0.9\), we get: 
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/sunset_harris_pts.jpg" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Sunset photo with found harris corners overlaid.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/sunset_suppressed_pts.jpg" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Sunset photo with harris points after<br>
+                                adaptive non-maximal suppression.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        As we can see, this algorithm was quite successful in reducing the number of points so that 
+        the most important interest points are retained and that the points are fairly uniformly 
+        spread out across the image.
+
+        <h3 align="left">Steps 2-3: Finding Features and Matching Using Features</h3>
+        As suggested in the paper, we construct a feature for each remaining interest point by sampling
+        an \(8\times 8\) vector from a \(40\times 40\) surrounding pixel region around the point, from 
+        a single image channel.
+        <br><br>
+        Then using these obtained features, we can perform a nearest neighbors matching algorithm with 
+        distance as L2 norm. We then iterate through the points of image 1 and match each one with the 
+        point in image 2 closest to it. To additionally remove false matches, we employ Lowe's trick and 
+        reject any pair where the ratio between the 1-NN and the 2-NN distances is less than \(0.5\). This 
+        parameter was chosen using Figure 6(b) from the paper to maximize correct matches while minimizing 
+        incorrect matches.
+        <br><br>
+        The remaining points after running this matching algorithm on the 2nd and 3rd bay sunset photos are 
+        shown below:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/sunset_matched2.png" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Sunset(2) photo with matched points (orange).
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/sunset_matched1.png" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Sunset(3) photo with matched points (orange).
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        This matching scheme saw remarkable success in our two example photos here, with most of the 
+        remaining points, having clearly correct matches.
+
+        <h3 align="left">Step 4: 4-Point RANSAC</h3>
+        Finally, in order to compute the correct homographies without having our results be ruining 
+        by outliers, we employ 4-point RANSAC. The jist of RANSAC is that for each iteration,
+        four pairs of points are randomly chosen and they have a homography computed on them. We then
+        map all of the points of one set through the homography and compared their distances with the 
+        actual paired points. If \(dist(Hp_1, p_2) < \epsilon\), then we consider it an inlier and with this, we
+        compute a set of the inliers. 
+        <br><br>
+        RANSAC then repeats this iterations 1000 (or more) times and keeps a list of the largest set of inliers.
+        Finally, the returned homography is the homography calculated from the set of inliers using the algorithm
+        described in part A.
+
+        <h3 align="left">Putting It All Together</h3>
+        With all of these steps put in place, we end up with a homography that we can then pass into the 
+        algorithm detailed in part A to warp and blend our images accordingly. The nice thing about this 
+        algorithm is how we don't need to compute correspondences anymore, so we can put all of our desired 
+        images into a list, and just let the algorithm run, appending each to the growing mosaic without 
+        any input needed from us.
+        <br><br>
+        Below I show the results of this algorithm on the previous mosaics and as well as the manually 
+        computed mosaic:
+
+        <h4 align="left">Bay Sunset</h4>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/sunset_12345.jpg" align="middle" width="700vw">
+                            <figcaption align="middle">
+                                Manual mosaic.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/auto_sunset.jpg" align="middle" width="700vw">
+                            <figcaption align="middle">
+                                Automatic mosaic.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 align="left">Street</h4>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/street_123.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Manual mosaic.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/auto_street.jpg" align="middle" width="300vw">
+                            <figcaption align="middle">
+                                Automatic mosaic.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 align="left">VLSB</h4>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/vlsb_12.jpg" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Manual mosaic.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/auto_vlsb.jpg" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Automatic mosaic.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        Overall we can see that the automatic mosaics produce just as good mosaics as the manual version 
+        and look very similar to each other. Note that for the street mosaic, I changed the order of blending 
+        as with the original order, the artifact from an imperfect alignment resulted in an extremely large 
+        number of Harris points that became very computational expensive to parse. I also changed the order 
+        of the bay sunset mosaic to try and achieve less of a constrast due to the exposure differences.
+
+        <h3 align="left">Coolest Part of this Project</h3>
+        I think the coolest part for me was seeing how well our algorithms for the autostitching worked
+        out. This was especially satisfying due to how annoying it was to calculate the correspondences 
+        everytime I wanted to stitching together just 2 photos. (And the sunset photo took 4 stitchings!)
+    </div>
+</body>
+</html>
