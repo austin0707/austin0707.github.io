@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CS180 Project 5 Austin Zhu</title>
+    <style>  
+        body {
+        padding: 100px;
+        width: 1000px;
+        margin: auto;
+        text-align: left;
+        font-weight: 300;
+        font-family: 'Open Sans', sans-serif;
+        color: #121212;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4 {
+        font-family: 'Source Sans Pro', sans-serif;
+        }
+    </style>
+    <title>CS 180, Project 5</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+    <script type="text/javascript" id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+    </script>
+</head>
+<body>
+    <h1 align="center">Project 5: Fun With Diffusion Models!</h1>
+    <h2 align="center">Austin Zhu</h2>
+
+    <div>
+        In this project, we explore the usage of diffusion models for the purposes of image generation
+        and editing.
+
+        <h2 align="middle">Part A: The Power of Diffusion Models!</h2>
+        As the first part of the project, we use the existing, pretrained DeepFloyd IF diffusion model
+        and precomputed text embeddings to creating sampling loops and perform image editing tasks.
+
+        <h3 align="middle">Part 1: Sampling Loops</h3>
+        The main idea between our diffusion models is to train a neural net that can iteratively reverse
+        the noising process of an image. This way, we have a model that incremental takes a noisy image 
+        and moves it towards the desired image manifold, allowing us to generate new images.
+
+        <h3 align="left">1.1: Implementing the Forward Process</h3>
+        In order to do this, we first need to be able to add noise to images at our desired threshold.
+        The equation that achieves this is:
+        $$x_t = \sqrt{\bar{\alpha_t}}x_0 + \sqrt{1 - \bar{\alpha_t}}\epsilon$$
+        where \(\epsilon \sim N(0,1)\) is sampled at random. This is implemented in <code>forward(im, t)</code>.
+        <br><br>
+        Our \(\bar{\alpha_t}\) variable is taken from the array <code>alphas_cumprod</code>, which gives 
+        us magnitudes for the desired noise at the different time periods. Below are the results of applying 
+        this forward method on an image of the Campanile for \(t \in [250, 500, 750]\):
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_1_campanile.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Image of the Campanile.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_1_noise250.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Noised at t=250.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_1_noise500.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Noised at t=500.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_1_noise750.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Noised at t=750.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">1.2: Classical Denoising</h3>
+        Before we use our pretrained neural nets to denoise the image, we first demonstrate the results
+        of classical noising techniques via a low pass filter. Below are the results for the previously
+        noised images:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_1_noise250.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Noised at t=250.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_1_noise500.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Noised at t=500.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_1_noise750.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Noised at t=750.
+                            </figcaption>
+                        </td>
+                    </tr>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_2_unblur250.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Gaussian blur denoise at t=250.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_2_unblur250.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Gaussian blur denoise at t=500.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_2_unblur250.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Gaussian blur denoise at t=750.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        As we can see, this method isn't very effective especially at high noise levels. Note a kernel size of 15
+        and a \sigma of 2 were used in the gaussian blurs.
+
+        <h3 align="left">1.3: One-Step Denoising</h3>
+        Now we can actually try using our neural net to denoise the image. For now, we will try and 
+        estimate the original image in one step. Our neural net gives us a noise estimate \(\epsilon\) given the 
+        noised image and the timestep t, and we can then recover the estimated original image by 
+        solving for \(x_0\) in the original forward pass, giving:
+        $$x_0 = \frac{x_t - \sqrt{1 - \bar{\alpha_t}}\epsilon}{\sqrt{\bar{\alpha_t}}}$$
+        Applying this formula, we get the following results:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_1_noise250.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Noised at t=250.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_1_noise500.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Noised at t=500.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_1_noise750.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Noised at t=750.
+                            </figcaption>
+                        </td>
+                    </tr>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_3_clean250.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                One-step denoise at t=250.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_3_clean250.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                One-step denoise at t=500.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_3_clean250.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                One-step denoise at t=750.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        As we can see, this results are much better than those obtained using classical denoising in
+        part 1.2.
+
+        <h3 align="left">1.4: Iterative Denoising</h3>
+        We can further improve this denoising process by iteratively denoising the image, instead of 
+        simply trying to do it in one pass. This can be thought of as each step taking a linear interpolated
+        step for our current state towards the estimated clean image produced by 1.3. Additionally, instead 
+        of strictly iterating step by step down the values of t, we can take strided steps. For these examples,
+        we will take strided steps of 30 from 990 to 0. The iterative step is defined below:
+        $$x_{t'} = \frac{\sqrt{\bar{\alpha_{t'}}}\beta_t}{1 - \bar{\alpha_t}}x_0 + \frac{\sqrt{\alpha_t}(1-\bar{\alpha_{t'}})}{1-\bar{\alpha_t}}x_t + v_\sigma$$
+        where \(x_t\) is our current image, \(x_0\) is the estimate of the original image detailed in 
+        part 1.3, \(\bar{\alpha_t}\) is as defined before from <code>alphas_cumprod</code>, \(\alpha_t = \frac{\bar\alpha_t}{\bar\alpha_{t'}}\),
+        \(\beta_t = 1 - \alpha_t\), and \(v_\sigma\) is a predicted noise that is also outputted by DeepFloyd.
+        <br><br>
+        Then, with <code>t_start = 10</code>, iterating following these steps along our <code>strided_timesteps</code> gives us the following results
+        (with comparison to our methods provided):
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_4_clean90.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Denoised at t=90.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_4_clean240.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Denoised at t=240.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_4_clean390.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Denoised at t=390.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_4_clean540.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Denoised at t=540.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_4_clean690.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Denoised at t=690.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_1_campanile.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Original.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_4_clean.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Iteratively denoised.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_4_clean_one_step.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                One-step denoise.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_4_blur.png" align="middle" width="200vw">
+                            <figcaption align="middle">
+                                Gaussian blurred denoise.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">1.5: Diffusion Model Sampling</h3>
+        We can actually use our <code>iterative_denoise</code> function from part 1.4 to also generate 
+        new images. This is done by setting <code>t_start = 0</code> and passing in random noise as our
+        images. Five sampled images are shown below using this method:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_5_samples.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                5 sampled images using iterative denoising.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">1.6: Classifer Free Guidance</h3>
+        The quality of the generated images in part 1.5 isn't the best, but we can improve this by 
+        implementing classifier free guidance, which uses a conditional and unconditional noise estimate
+        (\(\epsilon_c\) and \(\epsilon_u\) respectively). Unconditional simply means that the prompt embeddings
+        that we pass into the neural net, is that generated by the empty string ``''. Then, our noise 
+        estimate will be:
+        $$\epsilon = \epsilon_u + \gamma(\epsilon_c - \epsilon_u)$$
+        where \(\gamma\) is a variable indicating the strength of the CFG. We can then use this noise estimate 
+        in our algorithm in 1.4 to iterative denoise the image as before. The results of sampling 5
+        images using this technique is shown below. Note how the image quality is much better.
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_6_samples.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                5 sampled images using CFG iterative denoising.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">1.7: Image-to-image Translation</h3>
+        We can use these methods to make edits to existing images by adding some noise to an image via
+        <code>forward(im, t)</code>, then running <code>iterative_denoise_cfg</code> starting from the 
+        same index you used to noise the image. This results in completely new images that resemble the 
+        original image. Results are shown on the following images, for noise levels [1, 3, 5, 7, 10, 20]:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_sdedit.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Edited images
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_1_campanile.png" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Original
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_eagle.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Edited images
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/eagle.jpg" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Original
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_moon.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Edited images
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/moon.jpg" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Original
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 align="left">1.7.1: Editing Hand-Drawn and Web Images</h4>
+        We can apply this to web images or our own hand-drawn images as well. Results are shown below:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_1_web_gen_ims.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Web edited images
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_7_1_web_im.png" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Original
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_1_flower_ims.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Hand-drawn edited images
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_1_orange_ims.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Hand-drawn edited images
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 align="left">1.7.2: Inpainting</h4>
+        Using a binary mask \(\textbf{m}\) and slightly altering our denoising step, we can also force the model to 
+        only alter specific regions of the image. Our iterative step now has an additional:
+        $$x_t \leftarrow \textbf{m}x_t + (1-\textbf{m})forward(x_{orig}, t)$$
+        which replaces everything outside of the mask with our original image with the proper amount of noise.
+        <br><br>
+        Results are shown below:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_2_test_crop.png" align="middle" width="500vw">
+                            <figcaption align="middle">
+                                Inputs
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_7_2_test.png" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Edited image
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_2_moon_crop.png" align="middle" width="500vw">
+                            <figcaption align="middle">
+                                Inputs
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_7_2_moon.png" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Edited image
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_2_sunrise_crop.png" align="middle" width="500vw">
+                            <figcaption align="middle">
+                                Inputs
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_7_2_sunrise.png" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Edited image
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 align="left">1.7.3: Text-Conditional Image-to-image Translation</h4>
+        Finally, we can alter our existing photos towards a desired output by altering the input of 
+        our text embedding. Results are shown below:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_3_rocketship.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Edited towards rocketship
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_1_campanile.png" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Original
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_3_eagle_skull.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Edited towards skull
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/eagle.jpg" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Original
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_7_3_sunrise_snow.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Edited towards snowy mountain village
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/sunrise.jpg" align="middle" width="150vw">
+                            <figcaption align="middle">
+                                Original
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">1.8: Visual Anagrams</h3>
+        Using these techniques, we can also generate visual anagrams, images that look like different 
+        subjects rightway up and upside down. This again requires us to make modifications to the 
+        noise estimate, shown below with prompt embeddings \(p_1\) and \(p_2\):
+        $$\epsilon_1 = UNet(x_t, t, p_1)$$
+        $$\epsilon_2 = flip(UNet(flip(x_t), t, p_2))$$
+        $$\epsilon = (\epsilon_1 + \epsilon_2)/2$$
+        Note that \(\epsilon_2\) is generated from the flipped image on the second prompt embedding.
+        Averaging these two noise estimates together gives a noise estimate that we can then apply the
+        normal algorithm on.
+        <br><br>
+        Results for these hybrid images are shown below:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_8_anagram_campfire_oldman.png" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                People around campfire + old man.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_8_anagram_amalficost_hatman.png" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                Amalfi cost + man wearing a hat.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_8_anagram_dog_waterfalls.png" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                Dog + waterfalls.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">1.9: Hybrid Images</h3>
+        We can also use these methods to generate hybrid images similar to those in project 2. This 
+        will again involve altering our noise estimate as follows, for two prompt embeddings \(p_1\)
+        and \(p_2\):
+        $$\epsilon_1 = UNet(x_t, t, p_1)$$
+        $$\epsilon_2 = UNet(x_t, t, p_2)$$
+        $$\epsilon = f_{lowpass}(\epsilon_1) + f_{highpass}(\epsilon_2)$$
+        where we combine the two estimated by running a low pass filter on one, and a high pass filter 
+        on the other noise estimate. These filters are done by taking gaussian blurs and subtractions of 
+        those blurs, with kernel size 33 and \sigma 2.
+        <br><br>
+        Results are shown below:
+        <div align="middle">
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partA/1_9_hybrid_skull_waterfalls.png" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                Skull + waterfalls.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_9_hybrid_dog_pencil.png" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                Pencil + dog.
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partA/1_9_hybrid_man_snow.png" align="middle" width="250vw">
+                            <figcaption align="middle">
+                                Man + snowy mountain village.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2 align="middle">Part B: Diffusion Models from Scratch!</h2>
+        Now we aim to train our own noise prediction models from scratch by building the neural net
+        architecture.
+        <h3 align="middle">Part 1: Training a Single-Step Denoising UNet</h3>
+        First, we will build a simple one-step denoiser. This UNet will take in some noisy image \(z\) and 
+        attempt to denoise it back to a clean image \(x\).
+        <h3 align="left">1.1: Implementing the UNet</h3>
+        Pictured below are diagrams of the UNet architecture and the operations contained within it.
+
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/1_1_unet.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                UNet architecture.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/1_1_operations.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Block operations
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        As we can see, this is a fairly standard UNet architecture with downsample, followed by upsampling,
+        and plenty of cross feed-forward connections. Here, our UNet will take in \(1\times28\times28\) images 
+        and return \(1\times28\times28\) images, perfect for the MNIST dataset.
+
+        <h3 align="left">1.2: Using the UNet to Train a Denoiser</h3>
+        Next, we want to actually train our denoiser. Our inputs should be noised images and our outputs
+        should be the clean versions of those images. We can generate these by taking our clean images form
+        the MNIST dataset and adding noise to them, like in part A, to get our noisy images. 
+        $$z = x + \sigma\epsilon, \epsilon \sim N(0,I)$$
+
+        This noising process will look like the following:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/1_2_noised_ims.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Noised MNIST digits
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 align="left">1.2.1: Training</h4>
+        With these noised and clean image, we can start training our UNet. This is a fairly straightfoward
+        neural net training process. We train on \(\sigma=0.5\), use L2 loss, have our UNet with hidden
+        dimension 128, and use the Adam optimizer with a learning rate of 1e-4. 
+        <br><br>
+        Loading in our MNIST training dataset with batch size 256 (shuffled beforehand), we train the 
+        UNet over 5 epochs and obtain the following training loss curve:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/1_2_1_training_loss.png" align="middle" width="500vw">
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        Below are sample results after the 1st and 5th epochs:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/1_2_1_epoch1_test.png" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Sample results after epoch 1
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partB/1_2_1_epoch5_test.png" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Sample results after epoch 5
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 align="left">1.2.2: Out-of-Distribution Testing</h4>
+        We trained this denoiser on \(\sigma=0.5\). Now, we can test the denoiser's performance
+        for different values of noise, \(\sigma = [0.0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0]\).
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/1_2_2_sample_1.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Sample 1
+                            </figcaption>
+                        </td>
+                    </tr>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/1_2_2_sample_2.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Sample 2
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="middle">Part 2: Training a Diffusion Model</h3>
+        Now to implement diffusion, we will alter our UNet to predict noise instead of denoising the image,
+        which is still an equivalent program. Now our loss function is:
+        $$L = \mathbb{E}_{\epsilon,x_0,t}\|\epsilon_\theta(x_t, t)-\epsilon\|^2$$
+        as we would like to incorporate time-conditioning into our neural net as well.
+        <h3 align="left">2.1: Adding Time Conditioning to UNet</h3>
+        We can add time conditioning to the UNet by making the following changes to the architecture (adding
+        FCBlocks):
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_1_cond_unet.png" align="middle" width="800vw">
+                            <figcaption align="middle">
+                                Time Conditioned UNet architecture.
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_1_fc_block.png" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                FCBlock
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        This conditioning operation of the FCBlock back into the UNet are implemented by just adding 
+        the output of the FCBlock to the intermediate value in question (either the unflatten or 
+        up1 outputs). Some work using <code>einops.repeat</code> does need to be done to cast the FCBlock 
+        output into the correct shape.
+
+        <h3 align="left">2.2: Training the UNet</h3>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_2_training_alg.png" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Training time-conditioned UNet
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Note, t should be normalized before being passed into the UNet. Now we can follow the above 
+        algorithm, with values of \(\bar{\alpha_t}\), \(\alpha_t\), and \(beta_t\)
+        as specified in the spec or in the <a href="https://arxiv.org/abs/2006.11239">DDPM paper</a>.
+        <br><br>
+        We follow this training algorithm with L2 Loss, hidden dimension 64, and an Adam optimizer with an
+        initial learning rate of 1e-3, with an exponential decay scheduler with a gamma of \(0.1^{10/num_epochs}\).
+        We again use the MNIST training dataset with batch size 128, being trained over 20 epochs.
+        The resulting training loss curve is below:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_2_training_loss.png" align="middle" width="500vw">
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">2.3: Sampling from the UNet</h3>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_3_sampling_alg.png" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Sampling from Time Conditioned UNet
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Starting from total noise, we can use the above algorithm to obtain the following sampling results 
+        after epochs 5 and 20:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_3_epoch5_sample.png" align="middle" width="500vw">
+                            <figcaption align="middle">
+                                Sample results after epoch 5
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partB/2_3_epoch20_sample.png" align="middle" width="500vw">
+                            <figcaption align="middle">
+                                Sample results after epoch 20
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">2.4: Adding Class-Conditioning to UNet</h3>
+        In order to add class conditioning, we need to one-hot encode our class vector \(c\) and then
+        pass that into an FCBlock similar to the time-condition at the same locations. At those locations,
+        the operation will now look like (for example, the unflatten):<br>
+        <div align="middle"><code>unflatten = c1*unflatten + t1</code></div>
+        where <code>c1</code> and <code>t1</code> are the outputs from the class and time conditioned
+        FCBlock (with dimension adjusted according).
+        <br><br>
+        Additionally, during training, we have to implement dropout at a rate of \(p_{uncond}=0.1\), in
+        which we set our one-hot vector to a vector of zeros in order to get enough training data for the 
+        unconditioned estimate needed for CFG. 
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_4_training_alg.png" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Training Class Conditioned UNet
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Following the above algorithm and using the same parameters, we get the following training loss curve:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_4_training_loss.png" align="middle" width="500vw">
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 align="left">2.5: Sampling from the Class-Conditioned UNet</h3>
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_5_sampling_alg.png" align="middle" width="400vw">
+                            <figcaption align="middle">
+                                Sampling from Class Conditioned UNet
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        Following the above algorithm, which implements CFG from part A, we get the following sampling results 
+        after epochs 5 and 20:
+        <div align="middle"></div>
+            <table style="width:100%">
+                <tbody>
+                    <tr align="center">
+                        <td>
+                            <img src="media/partB/2_5_epoch5_sample.png" align="middle" width="500vw">
+                            <figcaption align="middle">
+                                Sample results after epoch 5
+                            </figcaption>
+                        </td>
+                        <td>
+                            <img src="media/partB/2_5_epoch20_sample.png" align="middle" width="500vw">
+                            <figcaption align="middle">
+                                Sample results after epoch 20
+                            </figcaption>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+
+    </div>
+</body>
+</html>
